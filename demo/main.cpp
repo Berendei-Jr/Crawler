@@ -1,12 +1,12 @@
-//#include <example.hpp>
+// Copyright 2022 Andrey Vedeneev vedvedved2003@gmail.com
+
 #include <crawler.hpp>
 
 namespace po = boost::program_options;
-namespace beast = boost::beast;     // from <boost/beast.hpp>
-namespace http = beast::http;       // from <boost/beast/http.hpp> // from <boost/asio.hpp>
 
 int main(int argc, char* argv[])
 {
+
   std::string url;
   int depth;
   int network_threads;
@@ -36,6 +36,8 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  net::crawler C(url, 1, network_threads, parser_threads);
+  //std::cout << net::endsWith("abcdef", "df");
+  //std::cerr << "MAIN IS " << std::this_thread::get_id() << std::endl;
+  net::crawler C(url, depth, network_threads, parser_threads);
   C.writeResultIntoFolder();
 }

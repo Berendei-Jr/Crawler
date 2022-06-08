@@ -84,7 +84,7 @@ void NetworkThreadFunction(std::shared_ptr<control_t> control)
   }
 }
 
-std::string Download(std::string& url)
+std::string DownloadPage(std::string& url)
 {
   try
   {

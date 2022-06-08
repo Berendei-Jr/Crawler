@@ -15,7 +15,7 @@ HunterGate(
 )
 
 project(CrawlerProject)
-string(APPEND CMAKE_CXX_FLAGS " -pedantic -Werror -Wall -Wextra")
+string(APPEND CMAKE_CXX_FLAGS " -pedantic -Wall -Wextra")
 string(APPEND CMAKE_CXX_FLAGS " -Wno-unused-command-line-argument")
 string(APPEND CMAKE_CXX_FLAGS " -Wshadow -Wnon-virtual-dtor")
 
@@ -23,8 +23,10 @@ hunter_add_package(GTest)
 #hunter_add_package(Boost COMPONENTS program_options)
 hunter_add_package(gumbo)
 #hunter_add_package(OpenSSL)
+#hunter_add_package(CURL)
 
-find_package(OpenSSL REQUIRED)
+find_package(CURL CONFIG REQUIRED)
+#find_package(OpenSSL REQUIRED)
 find_package(gumbo CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(Threads)
@@ -46,15 +48,14 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   "$<INSTALL_INTERFACE:include>"
   "${BOOST_ROOT}/include"
   "${GUMBO_ROOT}/include"
+  "${CURL_ROOT}/include"
 )
 
 target_link_libraries(crawler ${PROJECT_NAME}
         Threads::Threads
-        Boost::boost
         Boost::program_options
         gumbo::gumbo
-        OpenSSL::SSL
-        OpenSSL::Crypto
+        CURL::libcurl
 )
 
 if(BUILD_TESTS)
@@ -64,11 +65,10 @@ if(BUILD_TESTS)
   )
   target_link_libraries(tests ${PROJECT_NAME}
           GTest::gtest_main
+          Boost::program_options
           Threads::Threads
-          Boost::boost
           gumbo::gumbo
-          OpenSSL::SSL
-          OpenSSL::Crypto
+          CURL::libcurl
   )
   enable_testing()
   add_test(NAME unit_tests COMMAND tests)
