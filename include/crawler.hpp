@@ -11,18 +11,10 @@
 #include <curl/curl.h>
 #include <memory>
 #include <vector>
+#include <unordered_set>
 #include <condition_variable>
 #include <boost/program_options.hpp>
-//#include <boost/beast/core.hpp>
-//include <boost/beast/http.hpp>
 #include <utility>
-/*#include <boost/beast/version.hpp>
-#include <boost/asio/connect.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl/error.hpp>
-#include <boost/asio/ssl/stream.hpp>
-#include <boost/beast/ssl.hpp>
-#include <root_certificates.hpp>*/
 #include <threadSafeQueue.hpp>
 #include <gumbo.h>
 
@@ -87,7 +79,7 @@ namespace net {
         std::mutex m_consMtx;
 
         std::atomic_int m_count{};
-        std::vector<std::string> m_result;
+        std::unordered_set<std::string> m_result;
     };
 
     std::string DownloadPage(std::string &url);
@@ -106,6 +98,8 @@ namespace net {
 
     bool startWith(const std::string& s1, const std::string& s2);
     bool endsWith(const std::string& s1, const std::string& s2);
+
+    std::string getRoot(std::string& url);
 }
 
 #endif //CRAWLER_HPP

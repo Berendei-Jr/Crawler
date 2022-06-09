@@ -1,7 +1,6 @@
 // Copyright 2022 Andrey Vedeneev vedvedved2003@gmail.com
 
 #include <crawler.hpp>
-#include <utility>
 
 void net::producerFunction(crawler* crawler_ptr) {
     while (true) {  // if true, all the threads will be detached
@@ -54,10 +53,10 @@ void net::consumerFunction(crawler* crawler_ptr) {
         for (auto &i: ImgFound) {
             if (!i.empty()) {
                 if ((net::startWith(i, "http") || net::startWith(i, "www"))) {
-                    crawler_ptr->m_result.push_back(i);
+                    crawler_ptr->m_result.insert(i);
                 } else if (!net::endsWith(current.address, ".html")
                            && !net::endsWith(current.address, ".php")) {
-                    crawler_ptr->m_result.push_back(current.address + i);
+                    crawler_ptr->m_result.insert(current.address + i);
                 }
             }
         }
@@ -124,7 +123,7 @@ void net::crawler::writeResultIntoFolder() {
         i.detach();
     }
     //TODO
-    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << m_count << std::endl;
+    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << m_count << "\nResult << " << m_result.size() << std::endl;
     for (auto &i: m_result) {
         std::cout << i << std::endl;
     }
@@ -141,6 +140,8 @@ std::string net::DownloadPage(std::string& url) {
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, net::WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
 
@@ -230,4 +231,17 @@ bool net::endsWith(const std::string &s1, const std::string &s2) {
     } else {
         return false;
     }
+}
+
+std::string net::getRoot(std::string &url) {
+    std::string tmp;
+    int counter = 0;
+    for (auto i: url) {
+        if (i == '/')
+            ++counter;
+        if (counter == 3)
+            break;
+        tmp.push_back(i);
+    }
+    return tmp;
 }
