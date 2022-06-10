@@ -40,7 +40,7 @@ add_library(${PROJECT_NAME} STATIC
 )
 
 add_executable(crawler
-  ${CMAKE_CURRENT_SOURCE_DIR}/demo/main.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/main/main.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

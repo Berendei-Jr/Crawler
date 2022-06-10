@@ -36,7 +36,6 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  //std::cout << net::endsWith("abcdef", "df");
   //std::cerr << "MAIN IS " << std::this_thread::get_id() << std::endl;
   net::crawler C(url, depth, network_threads, parser_threads);
   C.writeResultIntoFolder();

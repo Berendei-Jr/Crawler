@@ -10,7 +10,7 @@ void net::producerFunction(crawler* crawler_ptr) {
 
         net::webPage current = crawler_ptr->getProdUrl();  // blocks the thread
         crawler_ptr->decrementProdCounter();
-        ++crawler_ptr->m_count;
+        ++crawler_ptr->mCount;
 
         current.html = net::DownloadPage(current.address);
         if (current.html.empty()) {
@@ -20,19 +20,25 @@ void net::producerFunction(crawler* crawler_ptr) {
         }
         std::cout << std::this_thread::get_id() << "\tLevel: " << current.level << "\tParsing the page: " << current.address << std::endl;
 
-        crawler_ptr->m_consumers_queue.push_back(current);
+        crawler_ptr->mConsumersQueue.push_back(current);
 
-        if (current.level + 1 < crawler_ptr->m_depth) {
+        if (current.level + 1 < crawler_ptr->mDepth) {
             GumboOutput* output = gumbo_parse(current.html.c_str());
             std::vector<std::string> LinksFound;
             net::search_for_links(output->root, LinksFound);
             for (auto& i: LinksFound) {
                 if (!i.empty()) {
-                    if ((net::startWith(i, "http") || net::startWith(i, "www"))) {
-                        crawler_ptr->m_producers_queue.push_back(webPage{i, current.level + 1, ""});
-                    } else if (!net::endsWith(current.address, ".html")
-                               && !net::endsWith(current.address, ".php")) {
-                        crawler_ptr->m_producers_queue.push_back(webPage{current.address + i, current.level + 1, ""});
+                  //  std::cout << "URL found, root: " << current.root << "; current: " << current.root << ";   i: " << i << std::endl;
+                    if (i[0] == '/') {
+                        crawler_ptr->mProducersQueue.push_back(webPage{current.root + i, current.level + 1, "", current.root} );
+                    } else if (net::startWith(i, "http")) {
+                        crawler_ptr->mProducersQueue.push_back(webPage{i, current.level + 1, "", net::getRoot(i)});
+                    } else if (net::endsWith(current.address, ".php") || net::endsWith(current.address, "html")) {
+                        crawler_ptr->mProducersQueue.push_back(webPage{net::cleanBackUntilSlash(current.address) + i, current.level + 1, "", current.root });
+                    } else if (*current.address.end() == '/') {
+                        crawler_ptr->mProducersQueue.push_back(webPage{current.address + i, current.level + 1, "", current.root} );
+                    } else {
+                        crawler_ptr->mProducersQueue.push_back(webPage{current.address + "/" + i, current.level + 1, "", current.root} );
                     }
                 }
             }
@@ -52,11 +58,17 @@ void net::consumerFunction(crawler* crawler_ptr) {
         net::search_for_img(output->root, ImgFound);
         for (auto &i: ImgFound) {
             if (!i.empty()) {
-                if ((net::startWith(i, "http") || net::startWith(i, "www"))) {
-                    crawler_ptr->m_result.insert(i);
-                } else if (!net::endsWith(current.address, ".html")
-                           && !net::endsWith(current.address, ".php")) {
-                    crawler_ptr->m_result.insert(current.address + i);
+               // std::cout << "IMG WITH URL root: " << current.root << "; current: " << current.address << ";   i: " << i << std::endl;
+                if (i[0] == '/') {
+                    crawler_ptr->mResult.insert(current.root + i );
+                } else if (net::startWith(i, "http")) {
+                    crawler_ptr->mResult.insert(i);
+                } else if (net::endsWith(current.address, ".php") || net::endsWith(current.address, "html")) {
+                    crawler_ptr->mResult.insert(net::cleanBackUntilSlash(current.address) + i );
+                } else if (*current.address.end() == '/') {
+                    crawler_ptr->mResult.insert(current.address + i);
+                } else {
+                    crawler_ptr->mResult.insert(current.address + "/" + i);
                 }
             }
         }
@@ -67,31 +79,64 @@ void net::consumerFunction(crawler* crawler_ptr) {
     }
 }
 
-net::crawler::crawler(std::string url, int depth, int network_threads, int parser_threads) {
+void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
+    while (!crawler_ptr->stopDownloaders()) {  // if true, all the threads will be detached
+
+        std::string current = crawler_ptr->getDownloadersUrl();  // blocks the thread
+        crawler_ptr->decrementDownCounter();
+
+        std::string header;
+        std::string body;
+
+        CURL *curl_handle = curl_easy_init();
+        if(curl_handle)
+        {
+            curl_easy_setopt(curl_handle, CURLOPT_URL, current.c_str());
+            curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, net::WriteCallback);
+            curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
+            curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, 5);
+            curl_easy_setopt(curl_handle, CURLOPT_WRITEHEADER, &header);
+            curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &body);
+
+            CURLcode res = curl_easy_perform(curl_handle);
+            if(res != CURLE_OK)
+                std::cout<< "curl_easy_perform() failed: %s\n" << curl_easy_strerror(res) << std::endl;
+            curl_easy_cleanup(curl_handle);
+        }
+
+        //TODO writing to files
+
+        crawler_ptr->incrementDownCounter();
+    }
+}
+
+net::crawler::crawler(std::string& url, int depth, int network_threads, int parser_threads) {
   if (network_threads < 1 || parser_threads < 1 || depth < 1)
-    throw std::runtime_error("Invalid arguments have been passed!\n");
-  m_producers_pool.reserve(network_threads);
-  m_consumers_pool.reserve(parser_threads);
-  m_depth = depth;
-  m_prodCounter = network_threads;
-  m_producers_num = network_threads;
-  m_consCounter = parser_threads;
-  m_consumers_num = parser_threads;
-  m_count = 0;
-  net::webPage startPoint = { std::move(url), 0, ""};
-  m_producers_queue.push_back(startPoint);
+    throw std::runtime_error("Invalid arguments have been passed!");
+  if (!net::startWith(url, "http"))
+      throw std::runtime_error("Use format 'http://' or 'https://' for url");
+  mProducersPool.reserve(network_threads);
+  mConsumersPool.reserve(parser_threads);
+    mDepth = depth;
+    mProdCounter = network_threads;
+    mProducersNum = network_threads;
+    mConsCounter = parser_threads;
+    mConsumersNum = parser_threads;
+    mCount = 0;
+  net::webPage startPoint = { url, 0, "", net::getRoot(url)};
+  mProducersQueue.push_back(startPoint);
 
   for (int i = 0; i < network_threads; ++i) {
-    m_producers_pool.emplace_back(producerFunction, this);
+    mProducersPool.emplace_back(producerFunction, this);
   }
   for (int i = 0; i < parser_threads; ++i) {
-    m_consumers_pool.emplace_back(consumerFunction, this);
+    mConsumersPool.emplace_back(consumerFunction, this);
   }
 }
 
 bool net::crawler::stopProducers() {
-    if (m_producers_queue.empty() && (m_prodCounter == m_producers_num)) {
-        m_prodStop = true;
+    if (mProducersQueue.empty() && (mProdCounter == mProducersNum)) {
+        mProdStop = true;
         stopConsumers();
         return true;
     }
@@ -99,11 +144,11 @@ bool net::crawler::stopProducers() {
 }
 
 bool net::crawler::stopConsumers() {
-    if (m_prodStop) {
-        if (m_consumers_queue.empty()) {
-            if (m_consCounter == m_consumers_num) {
-                m_consStop = true;
-                m_CV.notify_one();
+    if (mProdStop) {
+        if (mConsumersQueue.empty()) {
+            if (mConsCounter == mConsumersNum) {
+                mConsStop = true;
+                mCv.notify_one();
                 return true;
             }
         }
@@ -111,20 +156,22 @@ bool net::crawler::stopConsumers() {
     return false;
 }
 
+
+
 void net::crawler::writeResultIntoFolder() {
-    if (!m_consStop) {
-        std::unique_lock<std::mutex> ul(m_Mtx);
-        m_CV.wait(ul);
+    if (!mConsStop) {
+        std::unique_lock<std::mutex> ul(mMtx);
+        mCv.wait(ul);
     }
-    for (auto &i: m_producers_pool) {
+    for (auto &i: mProducersPool) {
         i.detach();
     }
-    for (auto &i: m_consumers_pool) {
+    for (auto &i: mConsumersPool) {
         i.detach();
     }
     //TODO
-    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << m_count << "\nResult << " << m_result.size() << std::endl;
-    for (auto &i: m_result) {
+    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << mCount << "\nResult << " << mResult.size() << std::endl;
+    for (auto &i: mResult) {
         std::cout << i << std::endl;
     }
 }
@@ -182,20 +229,16 @@ static void net::search_for_img(GumboNode* node, std::vector<std::string>& image
     if (node->v.element.tag == GUMBO_TAG_IMG &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         images.emplace_back(href->value);
-        std::cout << "Found img: " << href->value << "\n";
     } else if (node->v.element.tag == GUMBO_TAG_IMG &&
                (href = gumbo_get_attribute(&node->v.element.attributes, "src"))) {
         images.emplace_back(href->value);
-        std::cout << "Found img: " << href->value << "\n";
     } else if (node->v.element.tag == GUMBO_TAG_IMAGE &&
                (href = gumbo_get_attribute(&node->v.element.attributes, "src"))) {
         images.emplace_back(href->value);
-        std::cout << "Found img: " << href->value << "\n";
     } else if (node->v.element.tag == GUMBO_TAG_LINK &&
                (href = gumbo_get_attribute(&node->v.element.attributes, "type"))) {
         if (href->value == str.c_str()) {
             images.emplace_back(href->value);
-            std::cout << "Found img: " << href->value << "\n";
         }
     }
 
@@ -244,4 +287,16 @@ std::string net::getRoot(std::string &url) {
         tmp.push_back(i);
     }
     return tmp;
+}
+
+std::string net::cleanBackUntilSlash(std::string &url) {
+    while (*(--url.end()) != '/' && !url.empty()) {
+        url.pop_back();
+    }
+    return url;
+}
+
+size_t net::write_data( char *ptr, size_t size, size_t nmemb, FILE* data)
+{
+    return fwrite(ptr, size, nmemb, data);
 }
