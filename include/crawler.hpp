@@ -33,7 +33,7 @@ namespace net {
         crawler() = delete;
         crawler(const crawler &) = delete;
         crawler(crawler &&) = delete;
-        crawler(std::string& url, int depth, int network_threads, int parser_threads);
+        crawler(std::string& url, int depth, int network_threads, int parser_threads, int downloaders_threads);
 
         void writeResultIntoFolder();
         ~crawler() = default;
@@ -77,7 +77,6 @@ namespace net {
         //std::mutex m_consMtx;
 
         std::atomic_int mCount{};
-        std::unordered_set<std::string> mResult;
     };
 
     std::string DownloadPage(std::string &url);

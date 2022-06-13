@@ -3,7 +3,7 @@
 #include <crawler.hpp>
 
 void net::producerFunction(crawler* crawler_ptr) {
-    while (true) {  // if true, all the threads will be detached
+    while (true) {
 
         if (crawler_ptr->stopProducers())
             return;
@@ -49,7 +49,7 @@ void net::producerFunction(crawler* crawler_ptr) {
 }
 
 void net::consumerFunction(crawler* crawler_ptr) {
-    while (!crawler_ptr->stopConsumers()) {  // if true, all the threads will be detached
+    while (!crawler_ptr->stopConsumers()) {
         net::webPage current = crawler_ptr->getConsUrl();  // blocks the thread
         crawler_ptr->decrementConsCounter();
 
@@ -60,15 +60,15 @@ void net::consumerFunction(crawler* crawler_ptr) {
             if (!i.empty()) {
                // std::cout << "IMG WITH URL root: " << current.root << "; current: " << current.address << ";   i: " << i << std::endl;
                 if (i[0] == '/') {
-                    crawler_ptr->mResult.insert(current.root + i );
+                    crawler_ptr->mImgDownloadersQueue.push_back(current.root + i );
                 } else if (net::startWith(i, "http")) {
-                    crawler_ptr->mResult.insert(i);
+                    crawler_ptr->mImgDownloadersQueue.push_back(i);
                 } else if (net::endsWith(current.address, ".php") || net::endsWith(current.address, "html")) {
-                    crawler_ptr->mResult.insert(net::cleanBackUntilSlash(current.address) + i );
+                    crawler_ptr->mImgDownloadersQueue.push_back( net::cleanBackUntilSlash(current.address) + i );
                 } else if (*current.address.end() == '/') {
-                    crawler_ptr->mResult.insert(current.address + i);
+                    crawler_ptr->mImgDownloadersQueue.push_back(current.address + i);
                 } else {
-                    crawler_ptr->mResult.insert(current.address + "/" + i);
+                    crawler_ptr->mImgDownloadersQueue.push_back(current.address + "/" + i);
                 }
             }
         }
@@ -80,7 +80,7 @@ void net::consumerFunction(crawler* crawler_ptr) {
 }
 
 void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
-    while (!crawler_ptr->stopDownloaders()) {  // if true, all the threads will be detached
+    while (!crawler_ptr->stopDownloaders()) {
 
         std::string current = crawler_ptr->getDownloadersUrl();  // blocks the thread
         crawler_ptr->decrementDownCounter();
@@ -89,8 +89,7 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
         std::string body;
 
         CURL *curl_handle = curl_easy_init();
-        if(curl_handle)
-        {
+        if (curl_handle) {
             curl_easy_setopt(curl_handle, CURLOPT_URL, current.c_str());
             curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, net::WriteCallback);
             curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
@@ -99,39 +98,55 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
             curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &body);
 
             CURLcode res = curl_easy_perform(curl_handle);
-            if(res != CURLE_OK)
-                std::cout<< "curl_easy_perform() failed: %s\n" << curl_easy_strerror(res) << std::endl;
+            if (res != CURLE_OK)
+                std::cout << "curl_easy_perform() failed: %s\n" << curl_easy_strerror(res) << std::endl;
             curl_easy_cleanup(curl_handle);
         }
 
-        //TODO writing to files
+        auto n = header.find("image/");
+        if (n == std::string::npos)
+            continue;
+        std::string format;
+        for (auto& i: header.substr(n + 6)) {
+            if (i == ' ')
+                break;
+            format.push_back(i);
+        }
+
+        std::cout << "Detected format: " << format << std::endl;
 
         crawler_ptr->incrementDownCounter();
     }
 }
 
-net::crawler::crawler(std::string& url, int depth, int network_threads, int parser_threads) {
-  if (network_threads < 1 || parser_threads < 1 || depth < 1)
-    throw std::runtime_error("Invalid arguments have been passed!");
-  if (!net::startWith(url, "http"))
-      throw std::runtime_error("Use format 'http://' or 'https://' for url");
-  mProducersPool.reserve(network_threads);
-  mConsumersPool.reserve(parser_threads);
+net::crawler::crawler(std::string& url, int depth, int network_threads, int parser_threads, int downloaders_threads) {
+    if (network_threads < 1 || parser_threads < 1 || depth < 1)
+        throw std::runtime_error("Invalid arguments have been passed!");
+    if (!net::startWith(url, "http"))
+        throw std::runtime_error("Use format 'http://' or 'https://' for url");
+    mProducersPool.reserve(network_threads);
+    mConsumersPool.reserve(parser_threads);
+    mImgDownloadersPool.reserve(downloaders_threads);
     mDepth = depth;
     mProdCounter = network_threads;
     mProducersNum = network_threads;
     mConsCounter = parser_threads;
     mConsumersNum = parser_threads;
+    mDownCounter = downloaders_threads;
+    mDownloadersNum = downloaders_threads;
     mCount = 0;
-  net::webPage startPoint = { url, 0, "", net::getRoot(url)};
-  mProducersQueue.push_back(startPoint);
+    net::webPage startPoint = {url, 0, "", net::getRoot(url)};
+    mProducersQueue.push_back(startPoint);
 
-  for (int i = 0; i < network_threads; ++i) {
-    mProducersPool.emplace_back(producerFunction, this);
-  }
-  for (int i = 0; i < parser_threads; ++i) {
-    mConsumersPool.emplace_back(consumerFunction, this);
-  }
+    for (int i = 0; i < network_threads; ++i) {
+        mProducersPool.emplace_back(producerFunction, this);
+    }
+    for (int i = 0; i < parser_threads; ++i) {
+        mConsumersPool.emplace_back(consumerFunction, this);
+    }
+    for (int i = 0; i < downloaders_threads; ++i) {
+        mImgDownloadersPool.emplace_back(imgDownloaderFunction, this);
+    }
 }
 
 bool net::crawler::stopProducers() {
@@ -148,6 +163,18 @@ bool net::crawler::stopConsumers() {
         if (mConsumersQueue.empty()) {
             if (mConsCounter == mConsumersNum) {
                 mConsStop = true;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool net::crawler::stopDownloaders() {
+    if (mConsStop) {
+        if (mImgDownloadersQueue.empty()) {
+            if (mDownCounter == mDownloadersNum) {
+                mDownStop = true;
                 mCv.notify_one();
                 return true;
             }
@@ -156,10 +183,8 @@ bool net::crawler::stopConsumers() {
     return false;
 }
 
-
-
 void net::crawler::writeResultIntoFolder() {
-    if (!mConsStop) {
+    if (!mDownStop) {
         std::unique_lock<std::mutex> ul(mMtx);
         mCv.wait(ul);
     }
@@ -169,11 +194,10 @@ void net::crawler::writeResultIntoFolder() {
     for (auto &i: mConsumersPool) {
         i.detach();
     }
-    //TODO
-    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << mCount << "\nResult << " << mResult.size() << std::endl;
-    for (auto &i: mResult) {
-        std::cout << i << std::endl;
+    for (auto &i: mImgDownloadersPool) {
+        i.detach();
     }
+    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << mCount << std::endl;
 }
 
 std::string net::DownloadPage(std::string& url) {
@@ -294,9 +318,4 @@ std::string net::cleanBackUntilSlash(std::string &url) {
         url.pop_back();
     }
     return url;
-}
-
-size_t net::write_data( char *ptr, size_t size, size_t nmemb, FILE* data)
-{
-    return fwrite(ptr, size, nmemb, data);
 }
