@@ -33,9 +33,6 @@ find_package(Threads)
 find_package(Boost COMPONENTS program_options REQUIRED)
 
 add_library(${PROJECT_NAME} STATIC
-  # enum your files and delete this comment
-  #${CMAKE_CURRENT_SOURCE_DIR}/sources/example.cpp
-  # ${CMAKE_CURRENT_SOURCE_DIR}/include/crawler.hpp
   ${CMAKE_CURRENT_SOURCE_DIR}/sources/crawler.cpp
 )
 
@@ -60,7 +57,6 @@ target_link_libraries(crawler ${PROJECT_NAME}
 
 if(BUILD_TESTS)
   add_executable(tests
-    # TODO: enum your files and delete this comment
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/example.cpp
   )
   target_link_libraries(tests ${PROJECT_NAME}
