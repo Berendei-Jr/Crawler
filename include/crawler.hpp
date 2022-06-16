@@ -11,12 +11,15 @@
 #include <curl/curl.h>
 #include <memory>
 #include <vector>
-#include <unordered_set>
+#include <list>
 #include <condition_variable>
 #include <boost/program_options.hpp>
 #include <utility>
 #include <threadSafeQueue.hpp>
 #include <gumbo.h>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace net {
 
@@ -51,6 +54,8 @@ namespace net {
         webPage getProdUrl() { return mProducersQueue.pop_front(); }
         webPage getConsUrl() { return mConsumersQueue.pop_front(); }
         std::string getDownloadersUrl() { return mImgDownloadersQueue.pop_front(); }
+        void addToListTS(const std::string& s);
+        bool existsInListTS(const std::string& s) const;
         friend void producerFunction(crawler *crawler_ptr);
         friend void consumerFunction(crawler *crawler_ptr);
         friend void imgDownloaderFunction(crawler *crawler_ptr);
@@ -64,6 +69,7 @@ namespace net {
         tsqueue<webPage> mProducersQueue;
         tsqueue<webPage> mConsumersQueue;
         tsqueue<std::string> mImgDownloadersQueue;
+        std::list<std::string> mImgUrls;
         int mDepth;
         int mProducersNum;
         int mConsumersNum;
@@ -73,9 +79,10 @@ namespace net {
         std::atomic_bool mDownStop = false;
         mutable std::mutex mMtx;
         mutable std::condition_variable mCv;
-        //std::mutex mProdMtx;
-        //std::mutex m_consMtx;
+        std::mutex mImgMtx;
+        mutable std::mutex mListMtx;
 
+        fs::path imgPath;
         std::atomic_int mCount{};
     };
 

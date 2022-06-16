@@ -1,6 +1,7 @@
 // Copyright 2022 Andrey Vedeneev vedvedved2003@gmail.com
 
 #include <crawler.hpp>
+namespace fs = std::filesystem;
 
 void net::producerFunction(crawler* crawler_ptr) {
     while (true) {
@@ -10,15 +11,12 @@ void net::producerFunction(crawler* crawler_ptr) {
 
         net::webPage current = crawler_ptr->getProdUrl();  // blocks the thread
         crawler_ptr->decrementProdCounter();
-        ++crawler_ptr->mCount;
 
         current.html = net::DownloadPage(current.address);
         if (current.html.empty()) {
-            std::cout << "Empty page\n";
             crawler_ptr->incrementProdCounter();
             continue;
         }
-        std::cout << std::this_thread::get_id() << "\tLevel: " << current.level << "\tParsing the page: " << current.address << std::endl;
 
         crawler_ptr->mConsumersQueue.push_back(current);
 
@@ -28,17 +26,16 @@ void net::producerFunction(crawler* crawler_ptr) {
             net::search_for_links(output->root, LinksFound);
             for (auto& i: LinksFound) {
                 if (!i.empty()) {
-                  //  std::cout << "URL found, root: " << current.root << "; current: " << current.root << ";   i: " << i << std::endl;
                     if (i[0] == '/') {
-                        crawler_ptr->mProducersQueue.push_back(webPage{current.root + i, current.level + 1, "", current.root} );
+                        crawler_ptr->mProducersQueue.push_back(webPage{ current.root + i, current.level + 1, "", current.root} );
                     } else if (net::startWith(i, "http")) {
-                        crawler_ptr->mProducersQueue.push_back(webPage{i, current.level + 1, "", net::getRoot(i)});
+                        crawler_ptr->mProducersQueue.push_back(webPage{ i, current.level + 1, "", net::getRoot(i) });
                     } else if (net::endsWith(current.address, ".php") || net::endsWith(current.address, "html")) {
-                        crawler_ptr->mProducersQueue.push_back(webPage{net::cleanBackUntilSlash(current.address) + i, current.level + 1, "", current.root });
+                        crawler_ptr->mProducersQueue.push_back(webPage{ net::cleanBackUntilSlash(current.address) + i, current.level + 1, "", current.root });
                     } else if (*current.address.end() == '/') {
-                        crawler_ptr->mProducersQueue.push_back(webPage{current.address + i, current.level + 1, "", current.root} );
+                        crawler_ptr->mProducersQueue.push_back(webPage{ current.address + i, current.level + 1, "", current.root} );
                     } else {
-                        crawler_ptr->mProducersQueue.push_back(webPage{current.address + "/" + i, current.level + 1, "", current.root} );
+                        crawler_ptr->mProducersQueue.push_back(webPage{ current.address + "/" + i, current.level + 1, "", current.root} );
                     }
                 }
             }
@@ -58,7 +55,6 @@ void net::consumerFunction(crawler* crawler_ptr) {
         net::search_for_img(output->root, ImgFound);
         for (auto &i: ImgFound) {
             if (!i.empty()) {
-               // std::cout << "IMG WITH URL root: " << current.root << "; current: " << current.address << ";   i: " << i << std::endl;
                 if (i[0] == '/') {
                     crawler_ptr->mImgDownloadersQueue.push_back(current.root + i );
                 } else if (net::startWith(i, "http")) {
@@ -74,7 +70,6 @@ void net::consumerFunction(crawler* crawler_ptr) {
         }
         gumbo_destroy_output(&kGumboDefaultOptions, output);
 
-        std::cout << std::this_thread::get_id() << ": Consumer is parsing page: " << current.address << std::endl;
         crawler_ptr->incrementConsCounter();
     }
 }
@@ -85,6 +80,12 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
         std::string current = crawler_ptr->getDownloadersUrl();  // blocks the thread
         crawler_ptr->decrementDownCounter();
 
+        if (!crawler_ptr->existsInListTS(current)) {
+            crawler_ptr->addToListTS(current);
+        } else {
+            crawler_ptr->incrementDownCounter();
+            continue;
+        }
         std::string header;
         std::string body;
 
@@ -104,17 +105,26 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
         }
 
         auto n = header.find("image/");
-        if (n == std::string::npos)
+        if (n == std::string::npos) {
+            crawler_ptr->incrementDownCounter();
             continue;
-        std::string format;
-        for (auto& i: header.substr(n + 6)) {
-            if (i == ' ')
-                break;
-            format.push_back(i);
         }
+        std::string format;
+        for (int i = 0; i < 3; ++i) {
+            format.push_back(header.substr(n + 6)[i]);
+        }
+        if (header.substr(n + 6)[3] == 'g')
+            format.push_back('g');
 
-        std::cout << "Detected format: " << format << std::endl;
+        std::ofstream fout{
+                crawler_ptr->imgPath / (std::to_string(crawler_ptr->mCount++) + "." + format)}; // create regular file
+        if (fout) {
+            fout << body;
+        }
+        fout.close();
 
+        if (crawler_ptr->mCount % 5 == 0)
+            std::cout << "Count = " << crawler_ptr->mCount << std::endl;
         crawler_ptr->incrementDownCounter();
     }
 }
@@ -124,6 +134,7 @@ net::crawler::crawler(std::string& url, int depth, int network_threads, int pars
         throw std::runtime_error("Invalid arguments have been passed!");
     if (!net::startWith(url, "http"))
         throw std::runtime_error("Use format 'http://' or 'https://' for url");
+    std::cout << "The job has started..." << std::endl;
     mProducersPool.reserve(network_threads);
     mConsumersPool.reserve(parser_threads);
     mImgDownloadersPool.reserve(downloaders_threads);
@@ -147,12 +158,16 @@ net::crawler::crawler(std::string& url, int depth, int network_threads, int pars
     for (int i = 0; i < downloaders_threads; ++i) {
         mImgDownloadersPool.emplace_back(imgDownloaderFunction, this);
     }
+    imgPath = "Output";
+    fs::remove_all(imgPath);
+    fs::create_directory(imgPath);
 }
 
 bool net::crawler::stopProducers() {
     if (mProducersQueue.empty() && (mProdCounter == mProducersNum)) {
         mProdStop = true;
         stopConsumers();
+        std::cout << "Stage 1/3 finished..." << std::endl;
         return true;
     }
     return false;
@@ -163,6 +178,8 @@ bool net::crawler::stopConsumers() {
         if (mConsumersQueue.empty()) {
             if (mConsCounter == mConsumersNum) {
                 mConsStop = true;
+                std::cout << "Stage 2/3 finished..." << std::endl;
+                stopDownloaders();
                 return true;
             }
         }
@@ -171,11 +188,13 @@ bool net::crawler::stopConsumers() {
 }
 
 bool net::crawler::stopDownloaders() {
+    std::lock_guard<std::mutex> lg(mImgMtx);
     if (mConsStop) {
         if (mImgDownloadersQueue.empty()) {
             if (mDownCounter == mDownloadersNum) {
                 mDownStop = true;
                 mCv.notify_one();
+                std::cout << "Stage 3/3 finished..." << std::endl;
                 return true;
             }
         }
@@ -197,7 +216,17 @@ void net::crawler::writeResultIntoFolder() {
     for (auto &i: mImgDownloadersPool) {
         i.detach();
     }
-    std::cout << std::this_thread::get_id() << ": Writing to the folder!\nTotal pages: " << mCount << std::endl;
+    std::cout << "The job finished successfully!" << std::endl;
+}
+
+void net::crawler::addToListTS(const std::string &s) {
+    std::scoped_lock<std::mutex> lg(mListMtx);
+    mImgUrls.push_back(s);
+}
+
+bool net::crawler::existsInListTS(const std::string &s) const {
+    std::scoped_lock<std::mutex> lg(mListMtx);
+    return std::find(mImgUrls.begin(), mImgUrls.end(), s) != mImgUrls.end();
 }
 
 std::string net::DownloadPage(std::string& url) {
