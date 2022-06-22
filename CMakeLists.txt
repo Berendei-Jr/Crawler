@@ -4,8 +4,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_TESTS "Build tests" OFF)
-option(BUILD_DOCS "Build documentation" OFF)
-option(BUILD_COVERAGE "Build code coverage" OFF)
+#option(BUILD_DOCS "Build documentation" OFF)
+#option(BUILD_COVERAGE "Build code coverage" OFF)
 
 include("cmake/HunterGate.cmake")
 
@@ -57,7 +57,7 @@ target_link_libraries(crawler ${PROJECT_NAME}
 
 if(BUILD_TESTS)
   add_executable(tests
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/example.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/tests/tests.cpp
   )
   target_link_libraries(tests ${PROJECT_NAME}
           GTest::gtest_main
@@ -68,14 +68,4 @@ if(BUILD_TESTS)
   )
   enable_testing()
   add_test(NAME unit_tests COMMAND tests)
-endif()
-
-if(BUILD_COVERAGE)
-  set(ENABLE_COVERAGE ON CACHE BOOL "Enable coverage build." FORCE)
-  list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tools/coverage/cmake")
-  find_package(codecov)
-  string(APPEND CMAKE_CXX_FLAGS " --coverage")
-  add_coverage(${PROJECT_NAME})
-  add_coverage(tests)
-  coverage_evaluate()
 endif()

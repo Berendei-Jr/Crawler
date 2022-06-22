@@ -14,6 +14,7 @@
 #include <list>
 #include <condition_variable>
 #include <boost/program_options.hpp>
+#include <boost/progress.hpp>
 #include <utility>
 #include <threadSafeQueue.hpp>
 #include <gumbo.h>
@@ -39,7 +40,7 @@ namespace net {
         crawler(std::string& url, int depth, int network_threads, int parser_threads, int downloaders_threads);
 
         void writeResultIntoFolder();
-        ~crawler() = default;
+        ~crawler() { sem_destroy(&mProgressSem); };
 
     private:
         bool stopProducers();
@@ -78,15 +79,18 @@ namespace net {
         std::atomic_bool mConsStop = false;
         std::atomic_bool mDownStop = false;
         mutable std::mutex mMtx;
+        std::mutex mProgressMtx;
+        std::condition_variable mProgressCV;
         mutable std::condition_variable mCv;
         std::mutex mImgMtx;
         mutable std::mutex mListMtx;
+        sem_t mProgressSem;
 
         fs::path imgPath;
         std::atomic_int mCount{};
     };
 
-    std::string DownloadPage(std::string &url);
+    std::string DownloadPage(net::webPage& page);
 
     void producerFunction(crawler *crawler_ptr);
     void consumerFunction(crawler *crawler_ptr);

@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  //std::cerr << "MAIN IS " << std::this_thread::get_id() << std::endl;
   net::crawler C(url, depth, network_threads, parser_threads, downloaders_threads);
   C.writeResultIntoFolder();
+  return 0;
 }

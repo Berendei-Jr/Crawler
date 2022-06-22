@@ -12,7 +12,7 @@ void net::producerFunction(crawler* crawler_ptr) {
         net::webPage current = crawler_ptr->getProdUrl();  // blocks the thread
         crawler_ptr->decrementProdCounter();
 
-        current.html = net::DownloadPage(current.address);
+        current.html = net::DownloadPage(current);
         if (current.html.empty()) {
             crawler_ptr->incrementProdCounter();
             continue;
@@ -79,6 +79,9 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
 
         std::string current = crawler_ptr->getDownloadersUrl();  // blocks the thread
         crawler_ptr->decrementDownCounter();
+        if (crawler_ptr->mConsStop) {
+            sem_post(&crawler_ptr->mProgressSem);
+        }
 
         if (!crawler_ptr->existsInListTS(current)) {
             crawler_ptr->addToListTS(current);
@@ -93,14 +96,17 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
         if (curl_handle) {
             curl_easy_setopt(curl_handle, CURLOPT_URL, current.c_str());
             curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, net::WriteCallback);
-            curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
-            curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, 5);
+            curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 3);
             curl_easy_setopt(curl_handle, CURLOPT_WRITEHEADER, &header);
             curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, &body);
 
             CURLcode res = curl_easy_perform(curl_handle);
-            if (res != CURLE_OK)
-                std::cout << "curl_easy_perform() failed: %s\n" << curl_easy_strerror(res) << std::endl;
+            if (res != CURLE_OK) {
+               // std::cout << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+                curl_easy_cleanup(curl_handle);
+                crawler_ptr->incrementDownCounter();
+                continue;
+            }
             curl_easy_cleanup(curl_handle);
         }
 
@@ -116,15 +122,13 @@ void net::imgDownloaderFunction(net::crawler *crawler_ptr) {
         if (header.substr(n + 6)[3] == 'g')
             format.push_back('g');
 
-        std::ofstream fout{
+        std::ofstream fout {
                 crawler_ptr->imgPath / (std::to_string(crawler_ptr->mCount++) + "." + format)}; // create regular file
         if (fout) {
             fout << body;
         }
         fout.close();
 
-        if (crawler_ptr->mCount % 5 == 0)
-            std::cout << "Count = " << crawler_ptr->mCount << std::endl;
         crawler_ptr->incrementDownCounter();
     }
 }
@@ -146,6 +150,7 @@ net::crawler::crawler(std::string& url, int depth, int network_threads, int pars
     mDownCounter = downloaders_threads;
     mDownloadersNum = downloaders_threads;
     mCount = 0;
+    sem_init(&mProgressSem, 0, 0);
     net::webPage startPoint = {url, 0, "", net::getRoot(url)};
     mProducersQueue.push_back(startPoint);
 
@@ -159,15 +164,17 @@ net::crawler::crawler(std::string& url, int depth, int network_threads, int pars
         mImgDownloadersPool.emplace_back(imgDownloaderFunction, this);
     }
     imgPath = "Output";
-    fs::remove_all(imgPath);
+    try {
+        fs::remove_all(imgPath);
+    } catch (...) { fs::remove_all(imgPath); }
     fs::create_directory(imgPath);
 }
 
 bool net::crawler::stopProducers() {
     if (mProducersQueue.empty() && (mProdCounter == mProducersNum)) {
         mProdStop = true;
-        stopConsumers();
         std::cout << "Stage 1/3 finished..." << std::endl;
+        stopConsumers();
         return true;
     }
     return false;
@@ -179,6 +186,7 @@ bool net::crawler::stopConsumers() {
             if (mConsCounter == mConsumersNum) {
                 mConsStop = true;
                 std::cout << "Stage 2/3 finished..." << std::endl;
+                mCv.notify_one();
                 stopDownloaders();
                 return true;
             }
@@ -193,8 +201,6 @@ bool net::crawler::stopDownloaders() {
         if (mImgDownloadersQueue.empty()) {
             if (mDownCounter == mDownloadersNum) {
                 mDownStop = true;
-                mCv.notify_one();
-                std::cout << "Stage 3/3 finished..." << std::endl;
                 return true;
             }
         }
@@ -203,11 +209,18 @@ bool net::crawler::stopDownloaders() {
 }
 
 void net::crawler::writeResultIntoFolder() {
-    if (!mDownStop) {
+    if (!mConsStop) {
         std::unique_lock<std::mutex> ul(mMtx);
         mCv.wait(ul);
+        boost::progress_display show_progress(mImgDownloadersQueue.size());
+        while (!mImgDownloadersQueue.empty()) {
+            sem_wait(&mProgressSem);
+            ++show_progress;
+            std::cout << "Progress: " << show_progress.count() << std::endl;
+        }
     }
-    for (auto &i: mProducersPool) {
+    std::cout << "\nStage 3/3 finished..." << std::endl;
+        for (auto &i: mProducersPool) {
         i.detach();
     }
     for (auto &i: mConsumersPool) {
@@ -229,24 +242,24 @@ bool net::crawler::existsInListTS(const std::string &s) const {
     return std::find(mImgUrls.begin(), mImgUrls.end(), s) != mImgUrls.end();
 }
 
-std::string net::DownloadPage(std::string& url) {
+std::string net::DownloadPage(net::webPage& page) {
     CURL *curl;
     CURLcode res;
     std::string readBuffer;
 
     curl = curl_easy_init();
     if (curl) {
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_URL, page.address.c_str());
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, net::WriteCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 3);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3);
         res = curl_easy_perform(curl);
         curl_easy_cleanup(curl);
 
-        if (res != CURLE_OK) {
-            std::cerr << "Download of the page " << url << " failed:\n" << curl_easy_strerror(res) << std::endl;
+        if (res != CURLE_OK && page.level == 0) {
+            throw std::runtime_error("Download of the page " + page.address + " failed:\n" + curl_easy_strerror(res));
         }
 
     } else {
@@ -278,6 +291,10 @@ static void net::search_for_img(GumboNode* node, std::vector<std::string>& image
     }
 
     std::string str = "image/png";
+    std::string str1 = "image/jpeg";
+    std::string str2 = "image/gif";
+    std::string str3 = "image/svg";
+    std::string str4 = "image/jpg";
     GumboAttribute* href;
     if (node->v.element.tag == GUMBO_TAG_IMG &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
@@ -290,7 +307,9 @@ static void net::search_for_img(GumboNode* node, std::vector<std::string>& image
         images.emplace_back(href->value);
     } else if (node->v.element.tag == GUMBO_TAG_LINK &&
                (href = gumbo_get_attribute(&node->v.element.attributes, "type"))) {
-        if (href->value == str.c_str()) {
+        if (href->value == str.c_str() || href->value == str1.c_str() ||
+        href->value == str2.c_str() || href->value == str3.c_str() ||
+        href->value == str4.c_str()) {
             images.emplace_back(href->value);
         }
     }
