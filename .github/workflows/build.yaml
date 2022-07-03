@@ -15,7 +15,9 @@ jobs:
       - run: ls -la
       - run: sudo apt update -y
       - run: sudo apt install -y libboost-dev
-      - run: mkdir _build && cd _build
+      - run: mkdir _build
+      - run: ls -la
+      - run: cd _build
       - run: ls -la
       - run: cmake .. && make && ./crawler --help
       - run: echo "🍏 This job's status is ${{ job.status }}."
