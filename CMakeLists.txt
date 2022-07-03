@@ -22,7 +22,7 @@ string(APPEND CMAKE_CXX_FLAGS " -Wshadow -Wnon-virtual-dtor")
 hunter_add_package(GTest)
 #hunter_add_package(Boost COMPONENTS program_options)
 hunter_add_package(gumbo)
-#hunter_add_package(CURL)
+hunter_add_package(CURL)
 
 find_package(CURL CONFIG REQUIRED)
 find_package(gumbo CONFIG REQUIRED)
