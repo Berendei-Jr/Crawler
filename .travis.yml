@@ -4,12 +4,10 @@ compiler:
 os:
   - linux
 
-addons:
-  apt:
-    packages:
-      - g++
-      - cmake
-      - libboost-dev
+before_install:
+  - sudo apt-get update -y
+  - sudo apt-get install -y libboost-dev
+  - sudo apt-get install -y libcurl-dev
 
 jobs:
   include:
