@@ -24,11 +24,11 @@ hunter_add_package(GTest)
 hunter_add_package(gumbo)
 hunter_add_package(CURL)
 
+find_package(Boost CONFIG REQUIRED COMPONENTS program_options)
 find_package(CURL CONFIG REQUIRED)
 find_package(gumbo CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(Threads)
-find_package(Boost COMPONENTS program_options REQUIRED)
 
 add_library(${PROJECT_NAME} STATIC
   ${CMAKE_CURRENT_SOURCE_DIR}/sources/crawler.cpp
@@ -41,7 +41,6 @@ add_executable(crawler
 target_include_directories(${PROJECT_NAME} PUBLIC
   "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include>"
-  "${BOOST_ROOT}/include"
   "${GUMBO_ROOT}/include"
   "${CURL_ROOT}/include"
 )
