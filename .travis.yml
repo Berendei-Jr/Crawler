@@ -9,15 +9,12 @@ addons:
     packages:
       - g++
       - cmake
-      - libboost-dev
-      - curl
 
 jobs:
   include:
-    - name: "checks"
+    - name: "build"
       script:
-        - mkdir _build
-        - cd _build
+        - mkdir _build && cd _build
         - cmake .. && make && ./crawler --help
 
 notifications:

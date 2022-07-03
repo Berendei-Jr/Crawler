@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.12)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,13 +20,11 @@ string(APPEND CMAKE_CXX_FLAGS " -Wno-unused-command-line-argument")
 string(APPEND CMAKE_CXX_FLAGS " -Wshadow -Wnon-virtual-dtor")
 
 hunter_add_package(GTest)
-#hunter_add_package(Boost COMPONENTS program_options)
+hunter_add_package(Boost COMPONENTS program_options)
 hunter_add_package(gumbo)
-#hunter_add_package(OpenSSL)
-#hunter_add_package(CURL)
+hunter_add_package(CURL)
 
 find_package(CURL CONFIG REQUIRED)
-#find_package(OpenSSL REQUIRED)
 find_package(gumbo CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 find_package(Threads)
