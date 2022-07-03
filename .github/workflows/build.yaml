@@ -12,9 +12,10 @@ jobs:
       - name: List files in the repository
         run: |
               ls ${{ github.workspace }}
-
+      - run: ls -la
       - run: sudo apt update -y
       - run: sudo apt install -y libboost-dev
       - run: mkdir _build && cd _build
+      - run: ls -la
       - run: cmake .. && make && ./crawler --help
       - run: echo "🍏 This job's status is ${{ job.status }}."
