@@ -8,7 +8,7 @@ jobs:
       - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
       - run: echo "🖥️ The workflow is now ready to test your code on the runner."
       - name: List files in the repository
-      - run: |
+        run: |
               ls ${{ github.workspace }}
 
       - run: sudo apt update -y
