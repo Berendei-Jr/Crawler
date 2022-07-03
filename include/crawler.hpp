@@ -1,6 +1,4 @@
-//
-// Created by vedve on 02.06.2022.
-//
+// Copyright 2022 Andrey Vedeneev vedvedved2003@gmail.com
 
 #ifndef CRAWLER_HPP
 #define CRAWLER_HPP
@@ -10,67 +8,107 @@
 #include <string>
 #include <thread>
 #include <mutex>
-#include <shared_mutex>
+#include <curl/curl.h>
 #include <memory>
 #include <vector>
+#include <list>
 #include <condition_variable>
 #include <boost/program_options.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
+#include <boost/progress.hpp>
 #include <utility>
-#include <boost/beast/version.hpp>
-#include <boost/asio/connect.hpp>
-#include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl/error.hpp>
-#include <boost/asio/ssl/stream.hpp>
-#include <boost/beast/ssl.hpp>
-#include <root_certificates.hpp>
 #include <threadSafeQueue.hpp>
 #include <gumbo.h>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace net {
 
-struct url {
-  std::string address;
-  size_t level;
-};
+    struct webPage {
+        std::string address;
+        int level;
+        std::string html;
+        std::string root;
+    };
 
-class crawler : public std::enable_shared_from_this<crawler> {
+    class crawler {
 
- public:
-  crawler() = delete;
-  crawler(const crawler&) = delete;
-  crawler(crawler &&) = delete;
-  crawler(std::string url, int depth, int network_threads, int parser_threads);
-  void writeResultIntoFolder() const;
-  bool stopProducers();
-  bool stopConsumers();
-  void decrementProdCounter() { --m_prodCounter; }
-  void incrementProdCounter() { ++m_prodCounter; }
-  void decrementConsCounter() { --m_consCounter; }
-  void incrementConsCounter() { ++m_consCounter; }
-  url getProdUrl() { return m_producers_queue.pop_front(); }
-  url getConsUrl() { return m_consumers_queue.pop_front(); }
+    public:
+        crawler() = delete;
+        crawler(const crawler &) = delete;
+        crawler(crawler &&) = delete;
+        crawler(std::string& url, int depth, int network_threads, int parser_threads, int downloaders_threads);
 
-  ~crawler() = default;
+        void writeResultIntoFolder();
+        ~crawler() { sem_destroy(&mProgressSem); };
 
- private:
-  std::vector<std::thread> m_producers_pool;
-  std::vector<std::thread> m_consumers_pool;
-  std::atomic_int m_prodCounter{};
-  std::atomic_int m_consCounter{};
-  tsqueue<url> m_producers_queue;
-  tsqueue<url> m_consumers_queue;
-  int m_depth;
-  std::atomic_bool m_prodStop = false;
-  std::atomic_bool m_consStop = false;
-  mutable std::mutex m_Mtx;
-  mutable std::condition_variable m_CV;
-};
+    private:
+        bool stopProducers();
+        bool stopConsumers();
+        bool stopDownloaders();
+        void decrementProdCounter() { --mProdCounter; }
+        void incrementProdCounter() { ++mProdCounter; }
+        void decrementDownCounter() { --mDownCounter; }
+        void incrementDownCounter() { ++mDownCounter; }
+        void decrementConsCounter() { --mConsCounter; }
+        void incrementConsCounter() { ++mConsCounter; }
+        webPage getProdUrl() { return mProducersQueue.pop_front(); }
+        webPage getConsUrl() { return mConsumersQueue.pop_front(); }
+        std::string getDownloadersUrl() { return mImgDownloadersQueue.pop_front(); }
+        void addToListTS(const std::string& s);
+        bool existsInListTS(const std::string& s) const;
+        friend void producerFunction(crawler *crawler_ptr);
+        friend void consumerFunction(crawler *crawler_ptr);
+        friend void imgDownloaderFunction(crawler *crawler_ptr);
 
-void producerFunction(crawler* crawler_ptr);
-void consumerFunction(crawler* crawler_ptr);
+        std::vector<std::thread> mProducersPool;
+        std::vector<std::thread> mConsumersPool;
+        std::vector<std::thread> mImgDownloadersPool;
+        std::atomic_int mProdCounter{};
+        std::atomic_int mConsCounter{};
+        std::atomic_int mDownCounter{};
+        tsqueue<webPage> mProducersQueue;
+        tsqueue<webPage> mConsumersQueue;
+        tsqueue<std::string> mImgDownloadersQueue;
+        std::list<std::string> mImgUrls;
+        int mDepth;
+        int mProducersNum;
+        int mConsumersNum;
+        int mDownloadersNum;
+        std::atomic_bool mProdStop = false;
+        std::atomic_bool mConsStop = false;
+        std::atomic_bool mDownStop = false;
+        mutable std::mutex mMtx;
+        std::mutex mProgressMtx;
+        std::condition_variable mProgressCV;
+        mutable std::condition_variable mCv;
+        std::mutex mImgMtx;
+        mutable std::mutex mListMtx;
+        sem_t mProgressSem;
 
+        fs::path imgPath;
+        std::atomic_int mCount{};
+    };
+
+    std::string DownloadPage(net::webPage& page);
+
+    void producerFunction(crawler *crawler_ptr);
+    void consumerFunction(crawler *crawler_ptr);
+    void imgDownloaderFunction(crawler *crawler_ptr);
+
+    static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+        ((std::string *) userp)->append((char *) contents, size * nmemb);
+        return size * nmemb;
+    }
+
+    static inline void search_for_links(GumboNode *node, std::vector<std::string>& urls);
+    static inline void search_for_img(GumboNode* node, std::vector<std::string>& images);
+
+    bool startWith(const std::string& s1, const std::string& s2);
+    bool endsWith(const std::string& s1, const std::string& s2);
+
+    std::string getRoot(std::string& url);
+    std::string cleanBackUntilSlash(std::string& url);
 }
 
 #endif //CRAWLER_HPP

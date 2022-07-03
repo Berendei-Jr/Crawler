@@ -1,0 +1,20 @@
+remove it
+name: Test Build
+on: [push]
+jobs:
+  Test_1:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - name: List files in the repository
+        run: |
+              ls ${{ github.workspace }}
+      - run: ls -la
+      - run: sudo apt update -y
+      - run: sudo apt install -y libboost-dev
+      - run: cmake . && make && ./crawler --help
+      - run: echo "🍏 This job's status is ${{ job.status }}."
