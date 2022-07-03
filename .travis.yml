@@ -9,10 +9,11 @@ addons:
     packages:
       - g++
       - cmake
+      - libboost-dev
 
 jobs:
   include:
-    - name: "build"
+    - name: "Build"
       script:
         - mkdir _build && cd _build
         - cmake .. && make && ./crawler --help
