@@ -9,4 +9,6 @@ jobs:
 
       - run: sudo apt update -y
       - run: sudo apt install -y libboost-dev
+      - run: mkdir _build && cd _build
+      - run: cmake .. && make && ./crawler --help
       - run: echo "🍏 This job's status is ${{ job.status }}."
