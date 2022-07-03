@@ -10,6 +10,7 @@ jobs:
           - name: List files in the repository
             run: |
               ls ${{ github.workspace }}
+
       - run: sudo apt update -y
       - run: sudo apt install -y libboost-dev
       - run: mkdir _build && cd _build
