@@ -1,5 +1,5 @@
 # PhotoHunter
-## A Web Image Crawler built with CURL, boost & [gumbo-parser](https://github.com/google/gumbo-parser) (C/C++)
+## A Web Image Crawler built with [CURL](https://curl.se/libcurl), boost & [gumbo-parser](https://github.com/google/gumbo-parser) (C/C++)
 This multithreaded crawler will help you to download images from html-pages. It gets an url and recursively goes through
 the web-pages it finds with the fixed depth.
 
