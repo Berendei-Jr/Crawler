@@ -19,15 +19,15 @@ string(APPEND CMAKE_CXX_FLAGS " -pedantic -Wall -Wextra")
 string(APPEND CMAKE_CXX_FLAGS " -Wno-unused-command-line-argument")
 string(APPEND CMAKE_CXX_FLAGS " -Wshadow -Wnon-virtual-dtor")
 
-hunter_add_package(GTest)
+#hunter_add_package(GTest)
 #hunter_add_package(Boost COMPONENTS program_options)
 hunter_add_package(gumbo)
-#hunter_add_package(CURL)
+hunter_add_package(CURL)
 
-find_package(Boost CONFIG REQUIRED COMPONENTS program_options)
+find_package(Boost COMPONENTS program_options REQUIRED)
 find_package(CURL CONFIG REQUIRED)
 find_package(gumbo CONFIG REQUIRED)
-find_package(GTest CONFIG REQUIRED)
+#find_package(GTest CONFIG REQUIRED)
 find_package(Threads)
 
 add_library(${PROJECT_NAME} STATIC
@@ -35,7 +35,7 @@ add_library(${PROJECT_NAME} STATIC
 )
 
 add_executable(crawler
-        ${CMAKE_CURRENT_SOURCE_DIR}/main/main.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/main/main.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -43,6 +43,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   "$<INSTALL_INTERFACE:include>"
   "${GUMBO_ROOT}/include"
   "${CURL_ROOT}/include"
+  "${BOOST_ROOT}/include"
 )
 
 target_link_libraries(crawler ${PROJECT_NAME}

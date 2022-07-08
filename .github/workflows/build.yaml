@@ -15,6 +15,6 @@ jobs:
               ls ${{ github.workspace }}
       - run: ls -la
       - run: sudo apt update -y
-      - run: sudo apt install -y libboost-dev
+      - run: sudo apt install -y libboost-all-dev
       - run: cmake . && make && ./crawler --help
       - run: echo "🍏 This job's status is ${{ job.status }}."
