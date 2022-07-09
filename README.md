@@ -1,3 +1,4 @@
+![](https://github.com/Berendei-Jr/Crawler/actions/workflows/build.yaml/badge.svg)
 # PhotoHunter
 ## A Web Image Crawler built with [CURL](https://curl.se/libcurl), boost & [gumbo-parser](https://github.com/google/gumbo-parser) (C/C++)
 This multithreaded crawler will help you to download images from html-pages. It gets an url and recursively goes through
